@@ -1,0 +1,407 @@
+---
+title: "Classification Example"
+output: html_notebook
+---
+
+Benchmarking three diverse learners for a classification task
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Set Up the Environment
+
+- Set a seed for reproducibility
+- Install packages
+- Load libraries
+
+```{r}
+### Set seed ###
+
+set.seed(78)
+
+### Packages and Libraries ###
+
+# install.packages("knitr")
+# install.packages("mlr3verse")
+
+library(knitr) # for pretty tables
+library(mlr3verse)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Load Your Data
+
+`penguins` is a built-in classification task
+
+```{r}
+# create task object
+task = tsk("penguins")
+
+task
+
+task$missings()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Define learners
+
+- `classif.rpart`
+- `classif.naive_bayes`
+- `classif.xgboost`
+
+Things to look for:
+
+1. Feature Types
+  a. integer
+  b. numeric
+  c. factor
+2. Properties
+  a. multiclass
+  b. missings
+
+```{r}
+lrn("classif.rpart")
+
+lrn("classif.naive_bayes") # missing missings
+
+lrn("classif.xgboost") # missing factor
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Define pipeOps
+
+`classif.rpart` requires no preprocessing
+`classif.naive_bayes` requires imputation
+`classif.xgboost` requires encoding
+
+```{r}
+impute = po("imputesample", id="impute")
+
+encode = po("encode", id="encode")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Create Learners
+
+`rpart`
+```{r}
+rpart = lrn("classif.rpart", id="rpart")
+```
+
+
+
+`naive_bayes`
+```{r}
+lrnr = po("learner", lrn("classif.naive_bayes"), id="naive_bayes")
+
+graph = impute %>>% lrnr
+
+graph$plot(html=T)
+
+naive_bayes = as_learner(graph)
+```
+
+
+
+`xgboost`
+```{r}
+lrnr = po("learner", lrn("classif.xgboost"), id="xgboost")
+
+graph = encode %>>% lrnr
+
+graph$plot(html=T)
+
+xgboost = as_learner(graph)
+```
+
+
+
+
+
+
+
+
+
+
+Resampling
+
+```{r}
+# create a resampling object
+cv = rsmp("cv", folds=10)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Benchmarking
+
+```{r}
+design = benchmark_grid(
+  task = task,
+  learners = c(rpart, naive_bayes, xgboost),
+  resampling = cv
+)
+
+bmr = benchmark(design)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Results!
+
+```{r}
+# define the performance measure
+measure = msr("classif.ce")
+
+# aggregate the results over resamplings
+table = bmr$aggregate(measure)
+
+kable(table)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

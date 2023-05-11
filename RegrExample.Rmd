@@ -1,0 +1,172 @@
+---
+title: "Regression Example"
+output: html_notebook
+---
+
+Benchmarking diverse learners for a regression task
+
+
+Set Up the Environment
+
+- Set a seed for reproducibility
+- Install packages
+- Load libraries
+
+```{r}
+### Set seed ###
+
+set.seed(78)
+
+### Packages and Libraries ###
+
+# install.packages("mlr3verse")
+
+library(mlr3verse)
+```
+
+
+Load Your Data
+
+`bike_sharing` is a built-in regression task
+
+```{r}
+# create task object
+task = tsk("bike_sharing")
+
+task$data()
+
+task$missings()
+```
+
+
+Explore learners
+
+Things to look for:
+
+1. Feature Types
+  a. logical
+  b. integer
+  c. numeric
+  d. character
+  e. factor
+
+
+```{r}
+featureless = lrn("regr.featureless", id = "featureless") # no preprocessing
+
+ranger = lrn("regr.ranger", id = "ranger") # no preprocessing
+
+lm = lrn("regr.lm") # must preprocess date and categorical features
+
+rpart = lrn("regr.rpart") # must preprocess date and categorical features
+
+svm = lrn("regr.svm") # must preprocess date and categorical features
+
+xgboost = lrn("regr.xgboost") # must preprocess date and categorical features
+```
+
+
+Create pipeOps
+
+```{r}
+# create POSIXct type date from character date
+dateMutate = po("mutate", id="dateToPOSIXct")
+dateMutate$param_set$values$mutation = list(
+  date = ~ as.POSIXct(date, format="%Y-%m-%d", tz="UTC")
+)
+
+# encode the POSIXct type date into year, month, day columns
+dateFeatures = po("datefeatures", param_vals = list(
+  cyclic = FALSE, 
+  hour = FALSE, 
+  minute = FALSE, 
+  second = FALSE, 
+  is_day = FALSE, 
+  keep_date_var = FALSE))
+
+# encode categorical features
+encode = po("encode")
+```
+
+
+Create graph learners
+
+```{r}
+# rpart
+graph1 = dateMutate %>>% dateFeatures %>>% po("learner", rpart)
+
+graph1$plot(html = TRUE)
+
+rpart = as_learner(graph1)
+
+rpart$id = "rpart"
+
+
+
+# svm
+graph2 = dateMutate %>>% dateFeatures %>>% encode %>>% po("learner", svm)
+
+svm = as_learner(graph2)
+
+svm$id = "svm"
+
+
+
+# xgboost
+graph3 = dateMutate %>>% dateFeatures %>>% encode %>>% po("learner", xgboost)
+
+xgboost = as_learner(graph3)
+
+xgboost$id = "xgboost"
+
+
+
+# lm
+graph4 = dateMutate %>>% dateFeatures %>>% encode %>>% po("learner", lm)
+
+lm = as_learner(graph4)
+
+lm$id = "lm"
+```
+
+
+Resampling
+
+```{r}
+# create a resampling object
+cv = rsmp("cv", folds=10)
+```
+
+
+Benchmarking
+
+```{r}
+design = benchmark_grid(
+  task = task,
+  learners = c(ranger, rpart, svm, xgboost, lm, featureless),
+  resampling = cv
+)
+
+bmr = benchmark(design)
+```
+
+
+Results!
+
+```{r}
+# define the performance measure
+measure = msr("regr.rmse")
+
+# aggregate the results over resamplings
+bmr$aggregate(measure)
+```
+
+
+
+```{r}
+autoplot(bmr)
+```
+
+
+
+
